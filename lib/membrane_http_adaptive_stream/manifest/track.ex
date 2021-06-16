@@ -53,6 +53,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
                 current_seq_num: 0,
                 segments: Qex.new(),
                 stale_segments: Qex.new(),
+                attrs: [],
                 finished?: false,
                 window_duration: 0
               ]
@@ -82,12 +83,14 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
           current_seq_num: non_neg_integer,
           segments: segments_t,
           stale_segments: segments_t,
+          attrs: list(attribute_t),
           finished?: boolean,
           window_duration: non_neg_integer
         }
 
   @type id_t :: any
-  @type segments_t :: Qex.t({name :: String.t(), segment_duration_t})
+  @type attribute_t :: {key :: atom(), value :: any()}
+  @type segments_t :: Qex.t(%{name: String.t(), duration: segment_duration_t, attrs: [attribute_t]})
   @type segment_duration_t :: Membrane.Time.t() | Ratio.t()
 
   @spec new(Config.t()) :: t
@@ -101,9 +104,9 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
     |> Map.merge(Map.from_struct(config))
   end
 
-  @spec add_segment(t, segment_duration_t) ::
+  @spec add_segment(t, segment_duration_t, [attribute_t]) ::
           {{to_add_name :: String.t(), to_remove_names :: [String.t()]}, t}
-  def add_segment(%__MODULE__{finished?: false} = track, duration) do
+  def add_segment(%__MODULE__{finished?: false} = track, duration, attrs \\ []) do
     use Ratio, comparison: true
 
     name =
@@ -112,7 +115,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
 
     {stale_segments, track} =
       track
-      |> Map.update!(:segments, &Qex.push(&1, %{name: name, duration: duration}))
+      |> Map.update!(:segments, &Qex.push(&1, %{name: name, duration: duration, attrs: attrs}))
       |> Map.update!(:current_seq_num, &(&1 + 1))
       |> Map.update!(:window_duration, &(&1 + duration))
       |> Map.update!(:target_segment_duration, &if(&1 > duration, do: &1, else: duration))

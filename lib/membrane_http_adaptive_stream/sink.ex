@@ -94,7 +94,8 @@ defmodule Membrane.HTTPAdaptiveStream.Sink do
     |> Map.merge(%{
       storage: Storage.new(options.storage),
       manifest: %Manifest{name: options.manifest_name, module: options.manifest_module},
-      awaiting_first_segment: MapSet.new()
+      awaiting_first_segment: MapSet.new(),
+      scheduled_events: %{}
     })
     ~> {:ok, &1}
   end
@@ -146,7 +147,13 @@ defmodule Membrane.HTTPAdaptiveStream.Sink do
   def handle_write(Pad.ref(:input, id) = pad, buffer, _ctx, state) do
     %{storage: storage, manifest: manifest} = state
     duration = buffer.metadata.duration
-    {changeset, manifest} = Manifest.add_segment(manifest, id, duration)
+
+    {events, state} = case state.scheduled_events |> Map.get(id) do
+      nil -> {[], state}
+      event -> {[event], %{state | scheduled_events: Map.delete(state.scheduled_events, id)}}
+    end
+
+    {changeset, manifest} = Manifest.add_segment(manifest, id, duration, [{:program_date_time, DateTime.utc_now()} | events])
     state = %{state | manifest: manifest}
 
     with {:ok, storage} <- Storage.apply_segment_changeset(storage, changeset, buffer.payload),
@@ -196,6 +203,14 @@ defmodule Membrane.HTTPAdaptiveStream.Sink do
     with {:ok, state} <- result do
       {{:ok, notify: {:cleanup, cleanup}}, state}
     end
+  end
+
+  @impl true
+  def handle_other({:schedule_event, track_id, event}, _ctx, state) do
+    # %{manifest: manifest} = state
+
+    # {:ok, %{state | manifest: update_in(manifest, [:tracks, track_id], fun)}}
+    {:ok, %{state | scheduled_events: Map.put(state.scheduled_events, track_id, event)}}
   end
 
   defp maybe_notify_playable(id, %{awaiting_first_segment: awaiting_first_segment} = state) do
