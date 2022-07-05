@@ -237,6 +237,18 @@ defmodule Membrane.HTTPAdaptiveStream.SinkBin do
     {:ok, state}
   end
 
+  @impl true
+  def handle_notification(
+        {:track_playable, track_id},
+        :sink,
+        _ctx,
+        state
+      ) do
+    IO.inspect("Playable")
+    # notify about playable just when video becomes available
+    {{:ok, notify: {:playlist_playable, track_id}}, state}
+  end
+
   defp count_audio_tracks(context),
     do:
       Enum.count(context.pads, fn {_pad, metadata} ->
