@@ -107,13 +107,17 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     parse_track_config(line, config, others)
   end
 
-  @spec deserialize(String.t(), String.t()) :: Manifest.t()
-  def deserialize("", _data), do: raise(ArgumentError, "No manifest name was provided")
+  @spec deserialize_media_track(Manifest.Track.t(), String.t()) :: Manifest.Track.t()
+  def deserialize_media_track(track, data) do
+  end
 
-  def deserialize(name, _data) when not is_binary(name),
+  @spec deserialize_master_manifest(String.t(), String.t()) :: Manifest.t()
+  def deserialize_master_manifest("", _data), do: raise(ArgumentError, "No manifest name was provided")
+
+  def deserialize_master_manifest(name, _data) when not is_binary(name),
     do: raise(ArgumentError, "Manifest name has to be a binary")
 
-  def deserialize(name, "#EXTM3U" <> data) do
+  def deserialize_master_manifest(name, "#EXTM3U" <> data) do
     # Final s modifier activates "dotall"
     r = ~r/^\s*#EXT-X-VERSION\:(?<version>\d+)\s*(?<data>.*)$/s
     %{"version" => version_raw, "data" => data} = Regex.named_captures(r, data)
@@ -123,7 +127,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/, fn raw ->
         String.to_integer(raw)
       end},
-      {:codecs, ~r/CODECS="(?<codecs>.*)"/, fn raw ->
+      {:codecs, ~r/CODECS="(?<codecs>[\w|\.|,]*)"/, fn raw ->
         String.split(raw, ",")
       end},
       {:track_name, ~r/.*\s*(?<track_name>.*\.m3u8)/, fn raw ->
@@ -156,7 +160,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end)
   end
 
-  def deserialize(name, _data) do
+  def deserialize_master_manifest(name, _data) do
     raise ArgumentError,
           "Could not deserialize manifest #{inspect(name)} as it contains invalid data"
   end

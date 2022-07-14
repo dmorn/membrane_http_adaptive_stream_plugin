@@ -3,10 +3,10 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
 
   alias Membrane.HTTPAdaptiveStream.HLS
 
-  describe "Deserialize manifest" do
+  describe "Deserialize master manifest" do
     test "fails with empty content" do
-      assert_raise ArgumentError, fn -> HLS.deserialize("", "") end
-      assert_raise ArgumentError, fn -> HLS.deserialize("", "some invalid content") end
+      assert_raise ArgumentError, fn -> HLS.deserialize_master_manifest("", "") end
+      assert_raise ArgumentError, fn -> HLS.deserialize_master_manifest("", "some invalid content") end
     end
 
     test "fails when name is not provided" do
@@ -16,8 +16,8 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       #EXT-X-INDEPENDENT-SEGMENTS
       """
 
-      assert_raise ArgumentError, fn -> HLS.deserialize("", content) end
-      assert_raise ArgumentError, fn -> HLS.deserialize(1, content) end
+      assert_raise ArgumentError, fn -> HLS.deserialize_master_manifest("", content) end
+      assert_raise ArgumentError, fn -> HLS.deserialize_master_manifest(1, content) end
     end
 
     test "stores name when content is valid" do
@@ -29,7 +29,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
 
       name = "index"
 
-      manifest = HLS.deserialize(name, content)
+      manifest = HLS.deserialize_master_manifest(name, content)
       assert manifest.name == name
       assert manifest.tracks == %{}
     end
@@ -43,7 +43,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       #EXT-X-INDEPENDENT-SEGMENTS
       """
 
-      manifest = HLS.deserialize("bar", content)
+      manifest = HLS.deserialize_master_manifest("bar", content)
       assert manifest.version == version
     end
 
@@ -60,7 +60,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       muxed_video_720x480.m3u8
       """
 
-      manifest = HLS.deserialize("foo", content)
+      manifest = HLS.deserialize_master_manifest("foo", content)
       assert map_size(manifest.tracks) == 3
     end
 
@@ -75,9 +75,11 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       stream_640x360.m3u8
       #EXT-X-STREAM-INF:BANDWIDTH=1478400,AVERAGE-BANDWIDTH=1425600,CODECS="avc1.4d4029,mp4a.40.2",RESOLUTION=854x480,FRAME-RATE=30.000
       stream_854x480.m3u8
+      #EXT-X-STREAM-INF:BANDWIDTH=1047023,CODECS="avc1.42e00a",AUDIO="audio_default_id"
+      video_video_480x270.m3u8
       """
 
-      manifest = HLS.deserialize("foo", content)
+      manifest = HLS.deserialize_master_manifest("foo", content)
 
       [
         %{
@@ -86,7 +88,12 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
           codecs: ["avc1.42c01e", "mp4a.40.2"],
           resolution: [416, 234],
           frame_rate: 15.0
-        }
+        },
+        %{
+          track_name: "video_video_480x270",
+          bandwidth: 1047023,
+          codecs: ["avc1.42e00a"],
+        },
       ]
       |> Enum.each(fn config ->
         track_config = Map.get(manifest.tracks, config.track_name)
