@@ -91,38 +91,47 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   end
 
   @spec deserialize_master_manifest(String.t(), String.t()) :: Manifest.t()
-  def deserialize_master_manifest("", _data), do: raise(ArgumentError, "No manifest name was provided")
+  def deserialize_master_manifest("", _data),
+    do: raise(ArgumentError, "No manifest name was provided")
 
   def deserialize_master_manifest(name, _data) when not is_binary(name),
     do: raise(ArgumentError, "Manifest name has to be a binary")
 
   def deserialize_master_manifest(name, "#EXTM3U" <> data) do
-    header_config = capture_config(data, %{}, [
-      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, fn raw ->
-        String.to_integer(raw)
-      end},
-    ])
+    header_config =
+      capture_config(data, %{}, [
+        {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/,
+         fn raw ->
+           String.to_integer(raw)
+         end}
+      ])
+
     version = Map.get(header_config, :version)
     manifest = %Manifest{module: __MODULE__, name: name, version: version}
 
     matchers = [
-      {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/, fn raw ->
-        String.to_integer(raw)
-      end},
-      {:codecs, ~r/CODECS="(?<codecs>[\w|\.|,]*)"/, fn raw ->
-        String.split(raw, ",")
-      end},
-      {:track_name, ~r/.*\s*(?<track_name>.*\.m3u8)/, fn raw ->
-        String.trim_trailing(raw, ".m3u8")
-      end},
-      {:resolution, ~r/RESOLUTION=(?<resolution>\d+x\d+)/, fn raw ->
-        raw
-        |> String.split("x")
-        |> Enum.map(&String.to_integer/1)
-      end},
-      {:frame_rate, ~r/FRAME-RATE=(?<frame_rate>\d+\.?\d*)/, fn raw ->
-        String.to_float(raw)
-      end}
+      {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/,
+       fn raw ->
+         String.to_integer(raw)
+       end},
+      {:codecs, ~r/CODECS="(?<codecs>[\w|\.|,]*)"/,
+       fn raw ->
+         String.split(raw, ",")
+       end},
+      {:track_name, ~r/.*\s*(?<track_name>.*\.m3u8)/,
+       fn raw ->
+         String.trim_trailing(raw, ".m3u8")
+       end},
+      {:resolution, ~r/RESOLUTION=(?<resolution>\d+x\d+)/,
+       fn raw ->
+         raw
+         |> String.split("x")
+         |> Enum.map(&String.to_integer/1)
+       end},
+      {:frame_rate, ~r/FRAME-RATE=(?<frame_rate>\d+\.?\d*)/,
+       fn raw ->
+         String.to_float(raw)
+       end}
     ]
 
     track_configs =
@@ -149,45 +158,83 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   @spec deserialize_media_track(Manifest.Track.t(), String.t()) :: Manifest.Track.t()
   def deserialize_media_track(%Manifest.Track{} = track, "#EXTM3U" <> data) do
     header_matchers = [
-      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, fn raw ->
-        String.to_integer(raw)
-      end},
-      {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/, fn raw ->
-        String.to_integer(raw)
-      end},
-      {:current_seq_num, ~r/#EXT-X-MEDIA-SEQUENCE:(?<current_seq_num>\d+)/, fn raw ->
-        String.to_integer(raw)
-      end},
-      {:current_discontinuity_seq_num, ~r/#EXT-X-DISCONTINUITY-SEQUENCE:(?<current_discontinuity_seq_num>\d+)/, fn raw ->
-        String.to_integer(raw)
-      end},
+      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/,
+       fn raw ->
+         String.to_integer(raw)
+       end},
+      {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/,
+       fn raw ->
+         String.to_integer(raw)
+       end},
+      {:current_seq_num, ~r/#EXT-X-MEDIA-SEQUENCE:(?<current_seq_num>\d+)/,
+       fn raw ->
+         String.to_integer(raw)
+       end},
+      {:current_discontinuity_seq_num,
+       ~r/#EXT-X-DISCONTINUITY-SEQUENCE:(?<current_discontinuity_seq_num>\d+)/,
+       fn raw ->
+         String.to_integer(raw)
+       end}
     ]
+
     header_config = capture_config(data, %{}, header_matchers)
-    Enum.reduce(header_config, track, fn {key, val}, track ->
-      Map.put(track, key, val)
+
+    track =
+      Enum.reduce(header_config, track, fn {key, val}, track ->
+        Map.put(track, key, val)
+      end)
+
+    matchers = [
+      {:name, ~r/.*\s*(?<name>.*\..*$)/,
+       fn raw ->
+         ext = Path.extname(raw)
+         String.trim_trailing(raw, ext)
+       end},
+      {:duration, ~r/#EXTINF:(?<duration>\d+\.?\d*),/,
+       fn raw ->
+         String.to_float(raw)
+       end}
+    ]
+
+    # Avoids stale computations
+    track = %Manifest.Track{track | target_window_duration: :infinity}
+
+    segments =
+      ~r/#EXTINF:.*\s*.*/
+      |> Regex.scan(data)
+      |> Enum.map(fn [line] -> capture_config(line, %{}, matchers) end)
+      |> Enum.map(fn config -> struct(Manifest.Track.Segment, config) end)
+
+    Enum.reduce(segments, track, fn segment, track ->
+      {_, track} = Manifest.Track.add_segment(track, segment)
+      track
     end)
   end
 
-  def deserialize_media_track(_other, _data), do:
-    raise ArgumentError, "Invalid arguments provided"
+  def deserialize_media_track(_other, _data),
+    do: raise(ArgumentError, "Invalid arguments provided")
 
   defp capture_config(_line, config, []), do: config
+
   defp capture_config(line, config, [matcher | others]) do
     {id, regex, post_process} = matcher
-    config = case Regex.named_captures(regex, line) do
-      nil ->
-        config
-      captures ->
-        value =
-          captures
-          |> Map.get(Atom.to_string(id))
-          |> post_process.()
 
-        Map.put(config, id, value)
-    end
+    config =
+      case Regex.named_captures(regex, line) do
+        nil ->
+          config
+
+        captures ->
+          value =
+            captures
+            |> Map.get(Atom.to_string(id))
+            |> post_process.()
+
+          Map.put(config, id, value)
+      end
+
     capture_config(line, config, others)
   end
-
 
   defp build_media_playlist_path(%Manifest.Track{} = track) do
     [track.content_type, "_", track.track_name, ".m3u8"] |> Enum.join("")

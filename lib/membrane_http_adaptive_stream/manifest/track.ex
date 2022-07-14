@@ -16,7 +16,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
 
     @enforce_keys [
       :id,
-      :track_name,
+      :track_name
     ]
     defstruct @enforce_keys ++
                 [
@@ -29,7 +29,6 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
                   :frame_rate,
                   :resolution,
                   target_window_duration: nil,
-
                   persist?: false
                 ]
 
@@ -97,8 +96,12 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
           content_type: :audio | :video | :muxed,
           header_extension: String.t(),
           segment_extension: String.t(),
-          target_segment_duration: segment_duration_t,
+          target_segment_duration: Segment.duration_t(),
           target_window_duration: Membrane.Time.t() | Ratio.t(),
+          codecs: [String.t()],
+          bandwidth: pos_integer(),
+          frame_rate: float(),
+          resolution: [pos_integer()],
           persist?: boolean,
           track_name: String.t(),
           header_name: String.t(),
@@ -113,18 +116,8 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
         }
 
   @type id_t :: any
-  @type segments_t ::
-          Qex.t(%{
-            name: String.t(),
-            duration: segment_duration_t(),
-            bytes_size: segment_bytes_size_t(),
-            attributes: list(Manifest.SegmentAttribute.t())
-          })
-  @type segment_duration_t :: Membrane.Time.t() | Ratio.t()
 
-  @type segment_bytes_size_t :: non_neg_integer()
-
-  @type to_remove_names_t :: [segment_names: [String.t()], header_names: [String.t()]]
+  @type segments_t :: Qex.t(Segment.t())
 
   @spec new(Config.t()) :: t
   def new(%Config{} = config) do
@@ -145,45 +138,68 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
     |> Map.merge(config)
   end
 
+  defmodule Segment do
+    @type duration_t :: Membrane.Time.t() | Ratio.t()
+
+    @type bytes_size_t :: non_neg_integer()
+
+    defstruct [:name, :duration, :bytes_size, attributes: []]
+
+    @type t :: %__MODULE__{
+            name: String.t(),
+            duration: duration_t(),
+            bytes_size: bytes_size_t(),
+            attributes: list(Manifest.SegmentAttribute.t())
+          }
+  end
+
+  @type to_remove_names_t :: [segment_names: [String.t()], header_names: [String.t()]]
+
   @doc """
   Add a segment of given duration to the track.
   It is recommended not to pass discontinuity attribute manually but use `discontinue/1` function instead.
   """
   @spec add_segment(
           t,
-          segment_duration_t,
-          segment_bytes_size_t,
+          Segment.duration_t(),
+          Segment.bytes_size_t(),
           list(Manifest.SegmentAttribute.t())
-        ) ::
-          {{to_add_name :: String.t(), to_remove_names :: to_remove_names_t()}, t}
-  def add_segment(track, duration, bytes_size, attributes \\ [])
-
-  def add_segment(%__MODULE__{finished?: false} = track, bytes_size, duration, attributes) do
-    use Ratio, comparison: true
-
+        ) :: {{to_add_name :: String.t(), to_remove_names :: to_remove_names_t()}, t}
+  def add_segment(track, duration, bytes_size, attributes \\ []) do
     name =
       "#{track.content_type}_segment_#{track.next_segment_id}_" <>
         "#{track.track_name}#{track.segment_extension}"
 
+    add_segment(track, %Segment{
+      name: name,
+      duration: duration,
+      bytes_size: bytes_size,
+      attributes: attributes
+    })
+  end
+
+  def add_segment(%__MODULE__{finished?: false} = track, segment = %Segment{}) do
+    use Ratio, comparison: true
+
     attributes =
       if is_nil(track.awaiting_discontinuity),
-        do: attributes,
-        else: [track.awaiting_discontinuity | attributes]
+        do: segment.attributes,
+        else: [track.awaiting_discontinuity | segment.attributes]
+
+    segment = %Segment{segment | attributes: attributes}
 
     {stale_segments, stale_headers, track} =
       track
       |> Map.update!(
         :segments,
-        &Qex.push(&1, %{
-          name: name,
-          duration: duration,
-          bytes_size: bytes_size,
-          attributes: attributes
-        })
+        &Qex.push(&1, segment)
       )
       |> Map.update!(:next_segment_id, &(&1 + 1))
-      |> Map.update!(:window_duration, &(&1 + duration))
-      |> Map.update!(:target_segment_duration, &if(&1 > duration, do: &1, else: duration))
+      |> Map.update!(:window_duration, &(&1 + segment.duration))
+      |> Map.update!(
+        :target_segment_duration,
+        &if(&1 > segment.duration, do: &1, else: segment.duration)
+      )
       |> Map.put(:awaiting_discontinuity, nil)
       |> pop_stale_segments_and_headers()
 
@@ -206,11 +222,12 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
 
     track = %{track | current_seq_num: Enum.count(stale_segments)}
 
-    {{name, [segment_names: to_remove_segment_names, header_names: to_remove_header_names]},
+    {{segment.name,
+      [segment_names: to_remove_segment_names, header_names: to_remove_header_names]},
      %__MODULE__{track | stale_segments: stale_segments, stale_headers: stale_headers}}
   end
 
-  def add_segment(%__MODULE__{finished?: true} = _track, _duration, _bytes_size, _attributes),
+  def add_segment(%__MODULE__{finished?: true} = _segment),
     do: raise("Cannot add new segments to finished track")
 
   @doc """

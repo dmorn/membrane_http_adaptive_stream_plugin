@@ -7,7 +7,10 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
   describe "Deserialize master manifest" do
     test "fails with empty content" do
       assert_raise ArgumentError, fn -> HLS.deserialize_master_manifest("", "") end
-      assert_raise ArgumentError, fn -> HLS.deserialize_master_manifest("", "some invalid content") end
+
+      assert_raise ArgumentError, fn ->
+        HLS.deserialize_master_manifest("", "some invalid content")
+      end
     end
 
     test "fails when name is not provided" do
@@ -104,7 +107,10 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
 
       assert_raise ArgumentError, fn -> HLS.deserialize_media_track(track, "") end
-      assert_raise ArgumentError, fn -> HLS.deserialize_media_track(track, "some invalid content") end
+
+      assert_raise ArgumentError, fn ->
+        HLS.deserialize_media_track(track, "some invalid content")
+      end
     end
 
     test "fails when track is not provided" do
@@ -139,6 +145,32 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       assert track.target_segment_duration == duration
       assert track.current_seq_num == sequence
       assert track.current_discontinuity_seq_num == discontinuity
+    end
+
+    test "collects segments" do
+      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+
+      content = """
+      #EXTM3U
+      #EXT-X-VERSION:7
+      #EXT-X-TARGETDURATION:3
+      #EXT-X-MEDIA-SEQUENCE:0
+      #EXT-X-DISCONTINUITY-SEQUENCE:0
+      #EXT-X-MAP:URI="audio_header_audio_track_part0_.mp4"
+      #EXTINF:2.020136054,
+      audio_segment_0_audio_track.m4s
+      #EXTINF:2.020136054,
+      audio_segment_1_audio_track.m4s
+      #EXTINF:2.020136054,
+      audio_segment_2_audio_track.m4s
+      #EXTINF:2.020136054,
+      audio_segment_3_audio_track.m4s
+      #EXTINF:1.95047619,
+      audio_segment_4_audio_track.m4s
+      """
+
+      track = HLS.deserialize_media_track(track, content)
+      assert Enum.count(track.segments) == 5
     end
   end
 end
