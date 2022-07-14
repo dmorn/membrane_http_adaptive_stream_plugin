@@ -11,14 +11,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   alias Membrane.HTTPAdaptiveStream.{BandwidthCalculator, Manifest}
   alias Membrane.Time
 
-  @version 7
-
-  @master_playlist_header """
-                          #EXTM3U
-                          #EXT-X-VERSION:#{@version}
-                          #EXT-X-INDEPENDENT-SEGMENTS
-                          """
-                          |> String.trim()
+  @default_version 7
 
   @empty_segments Qex.new()
   @default_audio_track_id "audio_default_id"
@@ -63,38 +56,109 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       # Handling muxed content - where audio and video is contained in a single CMAF Track
       %{muxed: muxed_tracks} ->
         List.flatten([
-          {main_manifest_name, build_master_playlist({nil, muxed_tracks})},
+          {main_manifest_name, build_master_playlist(manifest, {nil, muxed_tracks})},
           muxed_tracks
           |> Enum.filter(&(&1.segments != @empty_segments))
-          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(&1)})
+          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(manifest, &1)})
         ])
 
       # Handle audio track and multiple renditions of video
       %{audio: [audio], video: videos} ->
         List.flatten([
-          {main_manifest_name, build_master_playlist({audio, videos})},
-          {"audio.m3u8", serialize_track(audio)},
+          {main_manifest_name, build_master_playlist(manifest, {audio, videos})},
+          {"audio.m3u8", serialize_track(manifest, audio)},
           videos
           |> Enum.filter(&(&1.segments != @empty_segments))
-          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(&1)})
+          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(manifest, &1)})
         ])
 
       # Handle only audio, without any video tracks
       %{audio: [audio]} ->
         [
-          {main_manifest_name, build_master_playlist({audio, nil})},
-          {"audio.m3u8", serialize_track(audio)}
+          {main_manifest_name, build_master_playlist(manifest, {audio, nil})},
+          {"audio.m3u8", serialize_track(manifest, audio)}
         ]
 
       # Handle video without audio
       %{video: videos} ->
         List.flatten([
-          {main_manifest_name, build_master_playlist({nil, videos})},
+          {main_manifest_name, build_master_playlist(manifest, {nil, videos})},
           videos
           |> Enum.filter(&(&1.segments != @empty_segments))
-          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(&1)})
+          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(manifest, &1)})
         ])
     end
+  end
+
+  defp parse_track_config(_line, [], config), do: struct(Manifest.Track.Config, config)
+  defp parse_track_config(line, [matcher | others], config) do
+    {id, regex, post_process} = matcher
+    config = case Regex.named_captures(regex, line) do
+      nil ->
+        config
+      captures ->
+        value =
+          captures
+          |> Map.get(Atom.to_string(id))
+          |> post_process.()
+
+        Map.put(config, id, value)
+    end
+    parse_track_config(line, others, config)
+  end
+
+  @spec deserialize(String.t(), String.t()) :: Manifest.t()
+  def deserialize("", _data), do: raise(ArgumentError, "No manifest name was provided")
+
+  def deserialize(name, _data) when not is_binary(name),
+    do: raise(ArgumentError, "Manifest name has to be a binary")
+
+  def deserialize(name, "#EXTM3U" <> data) do
+    # Final s modifier activates "dotall"
+    r = ~r/^\s*#EXT-X-VERSION\:(?<version>\d+)\s*(?<data>.*)$/s
+    %{"version" => version_raw, "data" => data} = Regex.named_captures(r, data)
+    version = String.to_integer(version_raw)
+
+    matchers = [
+      {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/, fn raw ->
+        String.to_integer(raw)
+      end},
+      {:codecs, ~r/CODECS="(?<codecs>.*)"/, fn raw ->
+        String.split(raw, ",")
+      end},
+      {:track_name, ~r/.*\s*(?<track_name>.*\.m3u8)/, fn raw ->
+        String.trim_trailing(raw, ".m3u8")
+      end},
+      {:resolution, ~r/RESOLUTION=(?<resolution>\d+x\d+)/, fn raw ->
+        raw
+        |> String.split("x")
+        |> Enum.map(&String.to_integer/1)
+      end},
+      {:frame_rate, ~r/FRAME-RATE=(?<frame_rate>\d+\.?\d*)/, fn raw ->
+        String.to_float(raw)
+      end}
+    ]
+
+    track_configs =
+      ~r/#EXT-X-STREAM-INF:.*\s*.*\.m3u8/
+      |> Regex.scan(data)
+      |> Enum.map(fn [line] -> parse_track_config(line, matchers, %{}) end)
+      |> Enum.map(fn config ->
+        id = Map.get(config, :track_name)
+        Map.put(config, :id, id)
+      end)
+
+    manifest = %Manifest{module: __MODULE__, name: name, version: version}
+
+    Enum.reduce(track_configs, manifest, fn config, manifest ->
+      {_, manifest} = Manifest.add_track(manifest, config)
+      manifest
+    end)
+  end
+
+  def deserialize(name, _data) do
+    raise ArgumentError,
+          "Could not deserialize manifest #{inspect(name)} as it contains invalid data"
   end
 
   defp build_media_playlist_path(%Manifest.Track{} = track) do
@@ -117,15 +181,28 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end
   end
 
-  defp build_master_playlist(tracks) do
+  defp build_master_playlist_header(manifest) do
+    version = manifest_version(manifest)
+
+    """
+    #EXTM3U
+    #EXT-X-VERSION:#{version}
+    #EXT-X-INDEPENDENT-SEGMENTS
+    """
+    |> String.trim()
+  end
+
+  defp build_master_playlist(manifest, tracks) do
+    master_playlist_header = build_master_playlist_header(manifest)
+
     case tracks do
       {audio, nil} ->
-        [@master_playlist_header, build_media_playlist_tag(audio)]
+        [master_playlist_header, build_media_playlist_tag(audio)]
         |> Enum.join("")
 
       {nil, videos} ->
         [
-          @master_playlist_header
+          master_playlist_header
           | videos
             |> Enum.filter(&(&1.segments != @empty_segments))
             |> Enum.flat_map(&[build_media_playlist_tag(&1), build_media_playlist_path(&1)])
@@ -144,7 +221,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
           )
 
         [
-          @master_playlist_header,
+          master_playlist_header,
           build_media_playlist_tag(audio),
           video_tracks
         ]
@@ -153,12 +230,16 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end
   end
 
-  defp serialize_track(%Manifest.Track{} = track) do
+  defp manifest_version(%Manifest{version: nil}), do: @default_version
+  defp manifest_version(%Manifest{version: version}), do: version
+
+  defp serialize_track(manifest, %Manifest.Track{} = track) do
+    version = manifest_version(manifest)
     target_duration = Ratio.ceil(track.target_segment_duration / Time.second()) |> trunc()
 
     """
     #EXTM3U
-    #EXT-X-VERSION:#{@version}
+    #EXT-X-VERSION:#{version}
     #EXT-X-TARGETDURATION:#{target_duration}
     #EXT-X-MEDIA-SEQUENCE:#{track.current_seq_num}
     #EXT-X-DISCONTINUITY-SEQUENCE:#{track.current_discontinuity_seq_num}

@@ -10,11 +10,12 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest do
   @type t :: %__MODULE__{
           name: String.t(),
           module: module,
+          version: pos_integer(),
           tracks: %{(id :: any) => Track.t()}
         }
 
   @enforce_keys [:name, :module]
-  defstruct @enforce_keys ++ [tracks: %{}]
+  defstruct @enforce_keys ++ [:version, tracks: %{}]
 
   @doc """
   Adds a track to the manifest.

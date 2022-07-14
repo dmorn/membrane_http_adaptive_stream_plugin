@@ -17,14 +17,19 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
     @enforce_keys [
       :id,
       :track_name,
-      :content_type,
-      :header_extension,
-      :segment_extension,
-      :target_segment_duration
     ]
     defstruct @enforce_keys ++
                 [
+                  :content_type,
+                  :header_extension,
+                  :segment_extension,
+                  :target_segment_duration,
+                  :codecs,
+                  :bandwidth,
+                  :frame_rate,
+                  :resolution,
                   target_window_duration: nil,
+
                   persist?: false
                 ]
 
@@ -45,6 +50,10 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
             content_type: :audio | :video,
             header_extension: String.t(),
             segment_extension: String.t(),
+            codecs: [String.t()],
+            bandwidth: pos_integer(),
+            frame_rate: float(),
+            resolution: [pos_integer()],
             target_segment_duration: Membrane.Time.t() | Ratio.t(),
             target_window_duration: Membrane.Time.t() | Ratio.t(),
             persist?: boolean
