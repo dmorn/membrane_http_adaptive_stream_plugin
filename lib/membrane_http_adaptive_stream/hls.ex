@@ -59,24 +59,24 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
           {main_manifest_name, build_master_playlist(manifest, {nil, muxed_tracks})},
           muxed_tracks
           |> Enum.filter(&(&1.segments != @empty_segments))
-          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(manifest, &1)})
+          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(&1)})
         ])
 
       # Handle audio track and multiple renditions of video
       %{audio: [audio], video: videos} ->
         List.flatten([
           {main_manifest_name, build_master_playlist(manifest, {audio, videos})},
-          {"audio.m3u8", serialize_track(manifest, audio)},
+          {"audio.m3u8", serialize_track(audio)},
           videos
           |> Enum.filter(&(&1.segments != @empty_segments))
-          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(manifest, &1)})
+          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(&1)})
         ])
 
       # Handle only audio, without any video tracks
       %{audio: [audio]} ->
         [
           {main_manifest_name, build_master_playlist(manifest, {audio, nil})},
-          {"audio.m3u8", serialize_track(manifest, audio)}
+          {"audio.m3u8", serialize_track(audio)}
         ]
 
       # Handle video without audio
@@ -85,30 +85,9 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
           {main_manifest_name, build_master_playlist(manifest, {nil, videos})},
           videos
           |> Enum.filter(&(&1.segments != @empty_segments))
-          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(manifest, &1)})
+          |> Enum.map(&{build_media_playlist_path(&1), serialize_track(&1)})
         ])
     end
-  end
-
-  defp parse_track_config(_line, config, []), do: struct(Manifest.Track.Config, config)
-  defp parse_track_config(line, config, [matcher | others]) do
-    {id, regex, post_process} = matcher
-    config = case Regex.named_captures(regex, line) do
-      nil ->
-        config
-      captures ->
-        value =
-          captures
-          |> Map.get(Atom.to_string(id))
-          |> post_process.()
-
-        Map.put(config, id, value)
-    end
-    parse_track_config(line, config, others)
-  end
-
-  @spec deserialize_media_track(Manifest.Track.t(), String.t()) :: Manifest.Track.t()
-  def deserialize_media_track(track, data) do
   end
 
   @spec deserialize_master_manifest(String.t(), String.t()) :: Manifest.t()
@@ -118,10 +97,13 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     do: raise(ArgumentError, "Manifest name has to be a binary")
 
   def deserialize_master_manifest(name, "#EXTM3U" <> data) do
-    # Final s modifier activates "dotall"
-    r = ~r/^\s*#EXT-X-VERSION\:(?<version>\d+)\s*(?<data>.*)$/s
-    %{"version" => version_raw, "data" => data} = Regex.named_captures(r, data)
-    version = String.to_integer(version_raw)
+    header_config = capture_config(data, %{}, [
+      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, fn raw ->
+        String.to_integer(raw)
+      end},
+    ])
+    version = Map.get(header_config, :version)
+    manifest = %Manifest{module: __MODULE__, name: name, version: version}
 
     matchers = [
       {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/, fn raw ->
@@ -146,13 +128,12 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     track_configs =
       ~r/#EXT-X-STREAM-INF:.*\s*.*\.m3u8/
       |> Regex.scan(data)
-      |> Enum.map(fn [line] -> parse_track_config(line, %{}, matchers) end)
+      |> Enum.map(fn [line] -> capture_config(line, %{}, matchers) end)
       |> Enum.map(fn config ->
         id = Map.get(config, :track_name)
         Map.put(config, :id, id)
       end)
-
-    manifest = %Manifest{module: __MODULE__, name: name, version: version}
+      |> Enum.map(fn config -> struct(Manifest.Track.Config, config) end)
 
     Enum.reduce(track_configs, manifest, fn config, manifest ->
       {_, manifest} = Manifest.add_track(manifest, config)
@@ -164,6 +145,49 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     raise ArgumentError,
           "Could not deserialize manifest #{inspect(name)} as it contains invalid data"
   end
+
+  @spec deserialize_media_track(Manifest.Track.t(), String.t()) :: Manifest.Track.t()
+  def deserialize_media_track(%Manifest.Track{} = track, "#EXTM3U" <> data) do
+    header_matchers = [
+      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, fn raw ->
+        String.to_integer(raw)
+      end},
+      {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/, fn raw ->
+        String.to_integer(raw)
+      end},
+      {:current_seq_num, ~r/#EXT-X-MEDIA-SEQUENCE:(?<current_seq_num>\d+)/, fn raw ->
+        String.to_integer(raw)
+      end},
+      {:current_discontinuity_seq_num, ~r/#EXT-X-DISCONTINUITY-SEQUENCE:(?<current_discontinuity_seq_num>\d+)/, fn raw ->
+        String.to_integer(raw)
+      end},
+    ]
+    header_config = capture_config(data, %{}, header_matchers)
+    Enum.reduce(header_config, track, fn {key, val}, track ->
+      Map.put(track, key, val)
+    end)
+  end
+
+  def deserialize_media_track(_other, _data), do:
+    raise ArgumentError, "Invalid arguments provided"
+
+  defp capture_config(_line, config, []), do: config
+  defp capture_config(line, config, [matcher | others]) do
+    {id, regex, post_process} = matcher
+    config = case Regex.named_captures(regex, line) do
+      nil ->
+        config
+      captures ->
+        value =
+          captures
+          |> Map.get(Atom.to_string(id))
+          |> post_process.()
+
+        Map.put(config, id, value)
+    end
+    capture_config(line, config, others)
+  end
+
 
   defp build_media_playlist_path(%Manifest.Track{} = track) do
     [track.content_type, "_", track.track_name, ".m3u8"] |> Enum.join("")
@@ -237,8 +261,11 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   defp manifest_version(%Manifest{version: nil}), do: @default_version
   defp manifest_version(%Manifest{version: version}), do: version
 
-  defp serialize_track(manifest, %Manifest.Track{} = track) do
-    version = manifest_version(manifest)
+  defp track_version(%Manifest.Track{version: nil}), do: @default_version
+  defp track_version(%Manifest.Track{version: version}), do: version
+
+  defp serialize_track(%Manifest.Track{} = track) do
+    version = track_version(track)
     target_duration = Ratio.ceil(track.target_segment_duration / Time.second()) |> trunc()
 
     """

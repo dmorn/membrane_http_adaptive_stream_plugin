@@ -63,6 +63,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
   @config_keys Config.__struct__() |> Map.from_struct() |> Map.keys()
   defstruct @config_keys ++
               [
+                :version,
                 :header_name,
                 current_seq_num: 0,
                 current_discontinuity_seq_num: 0,
@@ -92,6 +93,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
   """
   @type t :: %__MODULE__{
           id: id_t,
+          version: pos_integer(),
           content_type: :audio | :video | :muxed,
           header_extension: String.t(),
           segment_extension: String.t(),

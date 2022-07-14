@@ -2,6 +2,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
   use ExUnit.Case
 
   alias Membrane.HTTPAdaptiveStream.HLS
+  alias Membrane.HTTPAdaptiveStream.Manifest.Track
 
   describe "Deserialize master manifest" do
     test "fails with empty content" do
@@ -75,8 +76,6 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       stream_640x360.m3u8
       #EXT-X-STREAM-INF:BANDWIDTH=1478400,AVERAGE-BANDWIDTH=1425600,CODECS="avc1.4d4029,mp4a.40.2",RESOLUTION=854x480,FRAME-RATE=30.000
       stream_854x480.m3u8
-      #EXT-X-STREAM-INF:BANDWIDTH=1047023,CODECS="avc1.42e00a",AUDIO="audio_default_id"
-      video_video_480x270.m3u8
       """
 
       manifest = HLS.deserialize_master_manifest("foo", content)
@@ -88,12 +87,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
           codecs: ["avc1.42c01e", "mp4a.40.2"],
           resolution: [416, 234],
           frame_rate: 15.0
-        },
-        %{
-          track_name: "video_video_480x270",
-          bandwidth: 1047023,
-          codecs: ["avc1.42e00a"],
-        },
+        }
       ]
       |> Enum.each(fn config ->
         track_config = Map.get(manifest.tracks, config.track_name)
@@ -102,6 +96,49 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
           assert Map.get(track_config, key) == want
         end)
       end)
+    end
+  end
+
+  describe "Deserialize media track" do
+    test "fails with empty content" do
+      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+
+      assert_raise ArgumentError, fn -> HLS.deserialize_media_track(track, "") end
+      assert_raise ArgumentError, fn -> HLS.deserialize_media_track(track, "some invalid content") end
+    end
+
+    test "fails when track is not provided" do
+      content = """
+      #EXTM3U
+      #EXT-X-VERSION:7
+      #EXT-X-TARGETDURATION:3
+      #EXT-X-MEDIA-SEQUENCE:0
+      #EXT-X-DISCONTINUITY-SEQUENCE:0
+      """
+
+      assert_raise ArgumentError, fn -> HLS.deserialize_media_track(nil, content) end
+    end
+
+    test "collects manifest header" do
+      version = 4
+      duration = 3
+      sequence = 1
+      discontinuity = 1
+      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+
+      content = """
+      #EXTM3U
+      #EXT-X-VERSION:#{version}
+      #EXT-X-TARGETDURATION:#{duration}
+      #EXT-X-MEDIA-SEQUENCE:#{sequence}
+      #EXT-X-DISCONTINUITY-SEQUENCE:#{discontinuity}
+      """
+
+      track = HLS.deserialize_media_track(track, content)
+      assert track.version == version
+      assert track.target_segment_duration == duration
+      assert track.current_seq_num == sequence
+      assert track.current_discontinuity_seq_num == discontinuity
     end
   end
 end
