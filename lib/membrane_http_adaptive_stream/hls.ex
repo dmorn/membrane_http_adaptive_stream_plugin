@@ -90,8 +90,8 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end
   end
 
-  defp parse_track_config(_line, [], config), do: struct(Manifest.Track.Config, config)
-  defp parse_track_config(line, [matcher | others], config) do
+  defp parse_track_config(_line, config, []), do: struct(Manifest.Track.Config, config)
+  defp parse_track_config(line, config, [matcher | others]) do
     {id, regex, post_process} = matcher
     config = case Regex.named_captures(regex, line) do
       nil ->
@@ -104,7 +104,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
 
         Map.put(config, id, value)
     end
-    parse_track_config(line, others, config)
+    parse_track_config(line, config, others)
   end
 
   @spec deserialize(String.t(), String.t()) :: Manifest.t()
@@ -142,7 +142,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     track_configs =
       ~r/#EXT-X-STREAM-INF:.*\s*.*\.m3u8/
       |> Regex.scan(data)
-      |> Enum.map(fn [line] -> parse_track_config(line, matchers, %{}) end)
+      |> Enum.map(fn [line] -> parse_track_config(line, %{}, matchers) end)
       |> Enum.map(fn config ->
         id = Map.get(config, :track_name)
         Map.put(config, :id, id)
