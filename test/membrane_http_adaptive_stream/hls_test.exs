@@ -253,5 +253,28 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       track = HLS.deserialize_media_track(track, content)
       assert track.segment_extension == ".m4s"
     end
+
+    test "stores query if present" do
+      content = """
+      #EXTM3U
+      #EXT-X-VERSION:3
+      #EXT-X-TARGETDURATION:7
+      #EXT-X-MEDIA-SEQUENCE:1
+      #EXT-X-PLAYLIST-TYPE:VOD
+      #EXT-X-PROGRAM-DATE-TIME:2020-09-10T06:08:25.701Z
+      #EXTINF:6.00600,
+      a/stream_1280x720_3300k/00000/stream_1280x720_3300k_00522.ts?t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTc5MTYzMDEsImlhdCI6MTY1Nzg3MzEwMSwiaXNzIjoiY2RwIiwic3ViIjoiNmhReUhyUGRhRTNuL2Evc3RyZWFtXzEyODB4NzIwXzMzMDBrIiwidXNlcl9pZCI6IjMwNiIsInZpc2l0b3JfaWQiOiJiMGMyMGVkZS0wNDE2LTExZWQtYTYyMS0wYTU4YTlmZWFjMDIifQ.Fj7CADyZeoWtpaqiZLPodNHMWhlGeKjxLwpMR7lygqk
+      """
+
+      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+
+      track = HLS.deserialize_media_track(track, content)
+      segment = Qex.last!(track.segments)
+
+      assert segment.name == "a/stream_1280x720_3300k/00000/stream_1280x720_3300k_00522"
+
+      assert segment.query ==
+               "t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTc5MTYzMDEsImlhdCI6MTY1Nzg3MzEwMSwiaXNzIjoiY2RwIiwic3ViIjoiNmhReUhyUGRhRTNuL2Evc3RyZWFtXzEyODB4NzIwXzMzMDBrIiwidXNlcl9pZCI6IjMwNiIsInZpc2l0b3JfaWQiOiJiMGMyMGVkZS0wNDE2LTExZWQtYTYyMS0wYTU4YTlmZWFjMDIifQ.Fj7CADyZeoWtpaqiZLPodNHMWhlGeKjxLwpMR7lygqk"
+    end
   end
 end

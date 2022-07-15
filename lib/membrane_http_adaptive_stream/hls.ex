@@ -122,7 +122,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
          raw
          |> String.split("x")
          |> Enum.map(&String.to_integer/1)
-       end},
+       end}
     ]
 
     track_configs =
@@ -199,9 +199,12 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       end)
 
     matchers = [
-      {:name, ~r/.*\s*(?<name>.*)/, fn raw ->
-         ext = Path.extname(raw)
-         String.trim_trailing(raw, ext)
+      {:name, ~r/.*\s*(?<name>.*)/,
+       fn raw ->
+         uri = URI.parse(raw)
+         ext = Path.extname(uri.path)
+         name = String.trim_trailing(uri.path, ext)
+         [{:name, name}, {:query, uri.query}]
        end},
       {:duration, ~r/#EXTINF:(?<duration>\d+\.?\d*),/, &String.to_float(&1)}
     ]
