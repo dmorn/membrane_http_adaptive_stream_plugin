@@ -14,6 +14,10 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
 
     alias Membrane.HTTPAdaptiveStream.Manifest.Track
 
+    # NOTE: a Track might also be a subtitle track. Many fields that are
+    # meaningful fur an audio/video are not for a subtitle one. We may abstract
+    # the Track.Config & Track away into a general behaviour.
+
     @enforce_keys [
       :id,
       :track_name
@@ -29,6 +33,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
                   :frame_rate,
                   :resolution,
                   :query,
+                  :language,
                   target_window_duration: nil,
                   persist?: false
                 ]
@@ -55,6 +60,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
             frame_rate: float(),
             resolution: [pos_integer()],
             query: String.t(),
+            language: String.t(),
             target_segment_duration: Membrane.Time.t() | Ratio.t(),
             target_window_duration: Membrane.Time.t() | Ratio.t(),
             persist?: boolean

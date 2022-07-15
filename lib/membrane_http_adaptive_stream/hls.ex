@@ -147,7 +147,32 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       end)
       |> Enum.map(fn config -> struct(Manifest.Track.Config, config) end)
 
-    Enum.reduce(track_configs, manifest, fn config, manifest ->
+    subtitle_matchers = [
+      {:id, ~r/GROUP-ID="(?<id>.*)"/, fn raw -> raw end},
+      {:language, ~r/LANGUAGE="(?<language>[\w|\-]*)"/, fn raw -> raw end},
+      {:uri, ~r/URI="(?<uri>.*)"/,
+       fn raw ->
+         uri = URI.parse(raw)
+         name = String.trim_trailing(uri.path, ".m3u8")
+         query = uri.query
+         [{:track_name, name}, {:query, query}]
+       end}
+    ]
+
+    subtitle_track_configs =
+      ~r/#EXT-X-MEDIA:TYPE=SUBTITLES,.*/
+      |> Regex.scan(data)
+      |> Enum.map(fn [line] -> String.split(line, ",") end)
+      # The line it split into its fields as otherwise it is difficult to match
+      # the URI field w/o matching the rest of the line.
+      |> Enum.map(fn fields ->
+        fields
+        |> Enum.map(fn field -> capture_config(field, %{}, subtitle_matchers) end)
+        |> Enum.reduce(%{}, &Map.merge(&1, &2))
+      end)
+      |> Enum.map(fn config -> struct(Manifest.Track.Config, config) end)
+
+    Enum.reduce(track_configs ++ subtitle_track_configs, manifest, fn config, manifest ->
       {_, manifest} = Manifest.add_track(manifest, config)
       manifest
     end)
@@ -208,11 +233,12 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       |> Enum.map(fn [line] -> capture_config(line, %{}, matchers) end)
       |> Enum.map(fn config -> struct(Manifest.Track.Segment, config) end)
 
-    track = Enum.reduce(segments, track, fn segment, track ->
-      {_, track} = Manifest.Track.add_segment(track, segment)
-      track
-    end)
- 
+    track =
+      Enum.reduce(segments, track, fn segment, track ->
+        {_, track} = Manifest.Track.add_segment(track, segment)
+        track
+      end)
+
     if Regex.match?(~r/#EXT-X-ENDLIST/, data) do
       Manifest.Track.finish(track)
     else
