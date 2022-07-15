@@ -174,10 +174,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   @spec deserialize_media_track(Manifest.Track.t(), String.t()) :: Manifest.Track.t()
   def deserialize_media_track(%Manifest.Track{} = track, "#EXTM3U" <> data) do
     header_matchers = [
-      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/,
-       fn raw ->
-         String.to_integer(raw)
-       end},
+      {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, &String.to_integer(&1)},
       {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/,
        fn raw ->
          String.to_integer(raw)
@@ -190,7 +187,8 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
        ~r/#EXT-X-DISCONTINUITY-SEQUENCE:(?<current_discontinuity_seq_num>\d+)/,
        fn raw ->
          String.to_integer(raw)
-       end}
+       end},
+      {:segment_extension, ~r/#EXTINF:.*\s*(?<segment_extension>.*)/, &Path.extname(&1)}
     ]
 
     header_config = capture_config(data, %{}, header_matchers)
@@ -201,15 +199,11 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       end)
 
     matchers = [
-      {:name, ~r/.*\s*(?<name>.*\..*$)/,
-       fn raw ->
+      {:name, ~r/.*\s*(?<name>.*)/, fn raw ->
          ext = Path.extname(raw)
          String.trim_trailing(raw, ext)
        end},
-      {:duration, ~r/#EXTINF:(?<duration>\d+\.?\d*),/,
-       fn raw ->
-         String.to_float(raw)
-       end}
+      {:duration, ~r/#EXTINF:(?<duration>\d+\.?\d*),/, &String.to_float(&1)}
     ]
 
     # Avoids stale computations
