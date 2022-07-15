@@ -205,10 +205,16 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       |> Enum.map(fn [line] -> capture_config(line, %{}, matchers) end)
       |> Enum.map(fn config -> struct(Manifest.Track.Segment, config) end)
 
-    Enum.reduce(segments, track, fn segment, track ->
+    track = Enum.reduce(segments, track, fn segment, track ->
       {_, track} = Manifest.Track.add_segment(track, segment)
       track
     end)
+ 
+    if Regex.match?(~r/#EXT-X-ENDLIST/, data) do
+      Manifest.Track.finish(track)
+    else
+      track
+    end
   end
 
   def deserialize_media_track(_other, _data),

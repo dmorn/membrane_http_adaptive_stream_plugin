@@ -172,5 +172,25 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       track = HLS.deserialize_media_track(track, content)
       assert Enum.count(track.segments) == 5
     end
+
+    test "detects when track is finished" do
+      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+      content = """
+      #EXTM3U
+      #EXT-X-VERSION:7
+      #EXT-X-TARGETDURATION:10
+      #EXT-X-MEDIA-SEQUENCE:0
+      #EXT-X-DISCONTINUITY-SEQUENCE:0
+      #EXT-X-MAP:URI="video_header_video_track_part0_.mp4"
+      #EXTINF:10.0,
+      video_segment_0_video_track.m4s
+      #EXTINF:2.0,
+      video_segment_1_video_track.m4s
+      #EXT-X-ENDLIST
+      """
+
+      track = HLS.deserialize_media_track(track, content)
+      assert track.finished?
+    end
   end
 end
