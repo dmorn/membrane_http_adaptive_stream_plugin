@@ -174,6 +174,9 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
     end
 
     test "detects when track is finished" do
+      # TODO: what about when track event type is VOD? In that case it should
+      # be marked as finished as well.
+
       track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
       content = """
       #EXTM3U
