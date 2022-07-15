@@ -5,6 +5,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   Currently supports up to one audio and video stream.
   """
   @behaviour Membrane.HTTPAdaptiveStream.Manifest
+  @behaviour Membrane.HTTPAdaptiveStream.Deserializer
 
   use Ratio
 
@@ -90,7 +91,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end
   end
 
-  @spec deserialize_master_manifest(String.t(), String.t()) :: Manifest.t()
+  @impl true
   def deserialize_master_manifest("", _data),
     do: raise(ArgumentError, "No manifest name was provided")
 
@@ -161,7 +162,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       |> Enum.map(fn config -> struct(Manifest.Track.Config, config) end)
 
     Enum.reduce(track_configs ++ subtitle_track_configs, manifest, fn config, manifest ->
-      {_, manifest} = Manifest.add_track(manifest, config)
+      {_, manifest} = Manifest.add_track_config(manifest, config)
       manifest
     end)
   end
@@ -171,7 +172,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
           "Could not deserialize manifest #{inspect(name)} as it contains invalid data"
   end
 
-  @spec deserialize_media_track(Manifest.Track.t(), String.t()) :: Manifest.Track.t()
+  @impl true
   def deserialize_media_track(%Manifest.Track{} = track, "#EXTM3U" <> data) do
     header_matchers = [
       {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, &String.to_integer(&1)},

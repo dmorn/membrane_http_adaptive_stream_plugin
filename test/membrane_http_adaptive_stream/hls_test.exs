@@ -35,7 +35,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
 
       manifest = HLS.deserialize_master_manifest(name, content)
       assert manifest.name == name
-      assert manifest.tracks == %{}
+      assert manifest.track_configs == %{}
     end
 
     test "parses manifest version" do
@@ -65,7 +65,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       """
 
       manifest = HLS.deserialize_master_manifest("foo", content)
-      assert map_size(manifest.tracks) == 3
+      assert map_size(manifest.track_configs) == 3
     end
 
     test "keeps track configuration information" do
@@ -94,7 +94,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
         }
       ]
       |> Enum.each(fn config ->
-        track_config = Map.get(manifest.tracks, config.track_name)
+        track_config = Map.get(manifest.track_configs, config.track_name)
 
         Enum.each(config, fn {key, want} ->
           assert Map.get(track_config, key) == want
@@ -115,7 +115,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       """
 
       manifest = HLS.deserialize_master_manifest("foo", content)
-      track_config = Map.get(manifest.tracks, "stream_with_token")
+      track_config = Map.get(manifest.track_configs, "stream_with_token")
 
       assert track_config.query ==
                "t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTc5MTYzMDcsImlhdCI6MTY1Nzg3MzEwNywiaXNzIjoiY2RwIiwia2VlcF9zZWdtZW50cyI6bnVsbCwia2luZCI6ImNoaWxkIiwicGFyZW50IjoiNmhReUhyUGRhRTNuL3N0cmVhbS5tM3U4Iiwic3ViIjoiNmhReUhyUGRhRTNuL3N0cmVhbV82NDB4MzYwXzgwMGsubTN1OCIsInRyaW1fZnJvbSI6NTIxLCJ0cmltX3RvIjpudWxsLCJ1c2VyX2lkIjoiMzA2IiwidXVpZCI6bnVsbCwidmlzaXRvcl9pZCI6ImI0NGFlZjYyLTA0MTYtMTFlZC04NTRmLTBhNThhOWZlYWMwMiJ9.eVrBzEBbjHxDcg6xnZXfXy0ZoNoj_seaZwaja_WDwuc"
@@ -130,7 +130,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       """
 
       manifest = HLS.deserialize_master_manifest("foo", content)
-      track_config = Map.get(manifest.tracks, "subtitles")
+      track_config = Map.get(manifest.track_configs, "subtitles")
 
       assert track_config
       assert track_config.language == "de-DE"

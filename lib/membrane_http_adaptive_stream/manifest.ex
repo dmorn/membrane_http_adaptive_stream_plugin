@@ -5,17 +5,22 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest do
   use Bunch.Access
   alias __MODULE__.Track
 
+  # NOTE(dmorn): I would consider putting the serialization/deserialization
+  # behaviour into a separate module, leaving Track, Manifest and Segment for
+  # holding the information the HLS files hold.
+
   @callback serialize(t) :: [{manifest_name :: String.t(), manifest_content :: String.t()}]
 
   @type t :: %__MODULE__{
           name: String.t(),
           module: module,
           version: pos_integer(),
+          track_configs: %{(id :: any) => Track.Config.t()},
           tracks: %{(id :: any) => Track.t()}
         }
 
   @enforce_keys [:name, :module]
-  defstruct @enforce_keys ++ [:version, tracks: %{}]
+  defstruct @enforce_keys ++ [:version, tracks: %{}, track_configs: %{}]
 
   @doc """
   Adds a track to the manifest.
@@ -27,6 +32,16 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest do
     track = Track.new(config)
     manifest = %__MODULE__{manifest | tracks: Map.put(manifest.tracks, config.id, track)}
     {track.header_name, manifest}
+  end
+
+  @doc """
+  Adds a track configuration to the manifest. It is used when deserializing a
+  Manifest file. At that time, only the configuration is known. With that
+  information, it is possible to load the actual track finally inserting it
+  into the manifest.
+  """
+  def add_track_config(manifest, %Track.Config{} = config) do
+    %__MODULE__{manifest | track_configs: Map.put(manifest.track_configs, config.id, config)}
   end
 
   @spec add_segment(
