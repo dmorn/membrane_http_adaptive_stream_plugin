@@ -162,8 +162,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
       |> Enum.map(fn config -> struct(Manifest.Track.Config, config) end)
 
     Enum.reduce(track_configs ++ subtitle_track_configs, manifest, fn config, manifest ->
-      {_, manifest} = Manifest.add_track_config(manifest, config)
-      manifest
+      Manifest.add_track_config(manifest, config)
     end)
   end
 
@@ -173,7 +172,13 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   end
 
   @impl true
-  def deserialize_media_track(%Manifest.Track{} = track, "#EXTM3U" <> data) do
+  def deserialize_media_track(nil, _data) do
+    raise ArgumentError, "No media track configuration provided"
+  end
+
+  def deserialize_media_track(track_config, "#EXTM3U" <> data) do
+    track = Manifest.Track.new(track_config)
+
     header_matchers = [
       {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, &String.to_integer(&1)},
       {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/,
@@ -205,7 +210,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
          uri = URI.parse(raw)
          ext = Path.extname(uri.path)
          name = String.trim_trailing(uri.path, ext)
-         [{:name, name}, {:query, uri.query}]
+         [{:name, name}, {:query, uri.query}, {:extension, ext}]
        end},
       {:duration, ~r/#EXTINF:(?<duration>\d+\.?\d*),/, &String.to_float(&1)}
     ]

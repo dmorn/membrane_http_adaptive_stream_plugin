@@ -151,10 +151,11 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
 
     @type bytes_size_t :: non_neg_integer()
 
-    defstruct [:name, :query, :duration, :bytes_size, attributes: []]
+    defstruct [:name, :extension, :query, :duration, :bytes_size, attributes: []]
 
     @type t :: %__MODULE__{
             name: String.t(),
+            extension: String.t(),
             query: String.t(),
             duration: duration_t(),
             bytes_size: bytes_size_t(),

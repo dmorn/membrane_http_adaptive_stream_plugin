@@ -143,7 +143,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
 
   describe "Deserialize media track" do
     test "fails with empty content" do
-      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+      track = %Track.Config{id: "foo", track_name: "bar"}
 
       assert_raise ArgumentError, fn -> HLS.deserialize_media_track(track, "") end
 
@@ -169,7 +169,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       duration = 3
       sequence = 1
       discontinuity = 1
-      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+      track = %Track.Config{id: "foo", track_name: "bar"}
 
       content = """
       #EXTM3U
@@ -187,7 +187,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
     end
 
     test "collects segments" do
-      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+      track = %Track.Config{id: "foo", track_name: "bar"}
 
       content = """
       #EXTM3U
@@ -216,7 +216,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       # TODO: what about when track event type is VOD? In that case it should
       # be marked as finished as well.
 
-      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+      track = %Track.Config{id: "foo", track_name: "bar"}
 
       content = """
       #EXTM3U
@@ -236,8 +236,8 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       assert track.finished?
     end
 
-    test "stores segment_extension" do
-      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+    test "stores segment extension" do
+      track = %Track.Config{id: "foo", track_name: "bar"}
 
       content = """
       #EXTM3U
@@ -252,6 +252,9 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
 
       track = HLS.deserialize_media_track(track, content)
       assert track.segment_extension == ".m4s"
+
+      segment = Qex.last!(track.segments)
+      assert segment.extension == ".m4s"
     end
 
     test "stores query if present" do
@@ -266,7 +269,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       a/stream_1280x720_3300k/00000/stream_1280x720_3300k_00522.ts?t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTc5MTYzMDEsImlhdCI6MTY1Nzg3MzEwMSwiaXNzIjoiY2RwIiwic3ViIjoiNmhReUhyUGRhRTNuL2Evc3RyZWFtXzEyODB4NzIwXzMzMDBrIiwidXNlcl9pZCI6IjMwNiIsInZpc2l0b3JfaWQiOiJiMGMyMGVkZS0wNDE2LTExZWQtYTYyMS0wYTU4YTlmZWFjMDIifQ.Fj7CADyZeoWtpaqiZLPodNHMWhlGeKjxLwpMR7lygqk
       """
 
-      track = Track.new(%Track.Config{id: "foo", track_name: "bar"})
+      track = %Track.Config{id: "foo", track_name: "bar"}
 
       track = HLS.deserialize_media_track(track, content)
       segment = Qex.last!(track.segments)

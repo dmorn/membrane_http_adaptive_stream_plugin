@@ -21,6 +21,7 @@ defmodule Membrane.HTTPAdaptiveStream.Loader do
 
   @callback load_manifest(state_t, String.t()) :: callback_result_t
   @callback load_track(state_t, Track.Config.t()) :: callback_result_t
+  @callback load_segment(state_t, Track.Segment.t()) :: callback_result_t
 
   defstruct [:loader_impl, :impl_state, :deserializer]
   @opaque t :: %__MODULE__{loader_impl: module, impl_state: any, deserializer: Deserializer.t()}
@@ -40,15 +41,25 @@ defmodule Membrane.HTTPAdaptiveStream.Loader do
   @spec load_manifest(t, String.t()) :: {:ok, Manifest.t()} | {:error, any}
   def load_manifest(loader, location) do
     load_fun = fn -> loader.loader_impl.load_manifest(loader.impl_state, location) end
-    decode_fun = &loader.decoder.deserialize_master_manifest/1
+
+    decode_fun = fn data ->
+      manifest_name = Path.basename(location)
+      loader.deserializer.deserialize_master_manifest(manifest_name, data)
+    end
+
     load(load_fun, decode_fun)
   end
 
   @spec load_track(t, Track.Config.t()) :: {:ok, Track.t()} | {:error, any}
   def load_track(loader, %Track.Config{} = config) do
     load_fun = fn -> loader.loader_impl.load_track(loader.impl_state, config) end
-    decode_fun = &loader.decoder.deserialize_media_track/1
+    decode_fun = fn data -> loader.deserializer.deserialize_media_track(config, data) end
     load(load_fun, decode_fun)
+  end
+
+  @spec load_segment(t, Track.Segment.t()) :: callback_result_t
+  def load_segment(loader, %Track.Segment{} = segment) do
+    loader.loader_impl.load_segment(loader.impl_state, segment)
   end
 
   defp load(load_fun, decode_fun) do
