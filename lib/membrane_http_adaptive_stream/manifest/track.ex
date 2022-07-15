@@ -146,6 +146,16 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
     |> Map.merge(config)
   end
 
+  def target_segment_duration(%__MODULE__{target_segment_duration: d}, :milliseconds) do
+    # TODO: check is there are cases where target_segment_duration is not in
+    # seconds.
+    ceil(d * 1000)
+  end
+
+  def target_segment_duration(%__MODULE__{target_segment_duration: d}, :seconds) do
+    ceil(d)
+  end
+
   defmodule Segment do
     @type duration_t :: Membrane.Time.t() | Ratio.t()
 
