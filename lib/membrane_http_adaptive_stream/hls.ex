@@ -100,24 +100,16 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
   def deserialize_master_manifest(name, "#EXTM3U" <> data) do
     header_config =
       capture_config(data, %{}, [
-        {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/,
-         fn raw ->
-           String.to_integer(raw)
-         end}
+        {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, &String.to_integer(&1)}
       ])
 
     version = Map.get(header_config, :version)
     manifest = %Manifest{module: __MODULE__, name: name, version: version}
 
     matchers = [
-      {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/,
-       fn raw ->
-         String.to_integer(raw)
-       end},
-      {:codecs, ~r/CODECS="(?<codecs>[\w|\.|,]*)"/,
-       fn raw ->
-         String.split(raw, ",")
-       end},
+      {:bandwidth, ~r/BANDWIDTH=(?<bandwidth>\d+)/, &String.to_integer(&1)},
+      {:codecs, ~r/CODECS="(?<codecs>[\w|\.|,]*)"/, &String.split(&1, ",")},
+      {:frame_rate, ~r/FRAME-RATE=(?<frame_rate>\d+\.?\d*)/, &String.to_float(&1)},
       {:track_name, ~r/.*\s*(?<track_name>.*\..*$)/,
        fn raw ->
          uri = URI.parse(raw)
@@ -131,10 +123,6 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
          |> String.split("x")
          |> Enum.map(&String.to_integer/1)
        end},
-      {:frame_rate, ~r/FRAME-RATE=(?<frame_rate>\d+\.?\d*)/,
-       fn raw ->
-         String.to_float(raw)
-       end}
     ]
 
     track_configs =
