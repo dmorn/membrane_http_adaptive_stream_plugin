@@ -84,6 +84,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       manifest = HLS.deserialize_master_manifest("foo", content)
 
       [
+        # TODO: check other tracks as well
         %{
           track_name: "stream_416x234",
           bandwidth: 334_400,
@@ -99,6 +100,24 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
           assert Map.get(track_config, key) == want
         end)
       end)
+    end
+
+    test "preserves path query parameters if present" do
+      # NOTE: this is a technique used by some services to forward
+      # authentication information from master playlists to final segments.
+      # Event though it is not a standard, it works pretty well in practice.
+      content = """
+      #EXTM3U
+      #EXT-X-VERSION:3
+      #EXT-X-INDEPENDENT-SEGMENTS
+      #EXT-X-STREAM-INF:BANDWIDTH=1020588,AVERAGE-BANDWIDTH=985600,CODECS="avc1.77.30,mp4a.40.2",RESOLUTION=640x360,FRAME-RATE=29.970,AUDIO="PROGRAM_AUDIO"
+      stream_with_token.m3u8?t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTc5MTYzMDcsImlhdCI6MTY1Nzg3MzEwNywiaXNzIjoiY2RwIiwia2VlcF9zZWdtZW50cyI6bnVsbCwia2luZCI6ImNoaWxkIiwicGFyZW50IjoiNmhReUhyUGRhRTNuL3N0cmVhbS5tM3U4Iiwic3ViIjoiNmhReUhyUGRhRTNuL3N0cmVhbV82NDB4MzYwXzgwMGsubTN1OCIsInRyaW1fZnJvbSI6NTIxLCJ0cmltX3RvIjpudWxsLCJ1c2VyX2lkIjoiMzA2IiwidXVpZCI6bnVsbCwidmlzaXRvcl9pZCI6ImI0NGFlZjYyLTA0MTYtMTFlZC04NTRmLTBhNThhOWZlYWMwMiJ9.eVrBzEBbjHxDcg6xnZXfXy0ZoNoj_seaZwaja_WDwuc
+      """
+
+      manifest = HLS.deserialize_master_manifest("foo", content)
+      track_config = Map.get(manifest.tracks, "stream_with_token")
+
+      assert track_config.query == "t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTc5MTYzMDcsImlhdCI6MTY1Nzg3MzEwNywiaXNzIjoiY2RwIiwia2VlcF9zZWdtZW50cyI6bnVsbCwia2luZCI6ImNoaWxkIiwicGFyZW50IjoiNmhReUhyUGRhRTNuL3N0cmVhbS5tM3U4Iiwic3ViIjoiNmhReUhyUGRhRTNuL3N0cmVhbV82NDB4MzYwXzgwMGsubTN1OCIsInRyaW1fZnJvbSI6NTIxLCJ0cmltX3RvIjpudWxsLCJ1c2VyX2lkIjoiMzA2IiwidXVpZCI6bnVsbCwidmlzaXRvcl9pZCI6ImI0NGFlZjYyLTA0MTYtMTFlZC04NTRmLTBhNThhOWZlYWMwMiJ9.eVrBzEBbjHxDcg6xnZXfXy0ZoNoj_seaZwaja_WDwuc"
     end
   end
 

@@ -28,6 +28,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
                   :bandwidth,
                   :frame_rate,
                   :resolution,
+                  :query,
                   target_window_duration: nil,
                   persist?: false
                 ]
@@ -53,6 +54,7 @@ defmodule Membrane.HTTPAdaptiveStream.Manifest.Track do
             bandwidth: pos_integer(),
             frame_rate: float(),
             resolution: [pos_integer()],
+            query: String.t(),
             target_segment_duration: Membrane.Time.t() | Ratio.t(),
             target_window_duration: Membrane.Time.t() | Ratio.t(),
             persist?: boolean

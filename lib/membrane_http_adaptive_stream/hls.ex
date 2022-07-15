@@ -118,9 +118,12 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
        fn raw ->
          String.split(raw, ",")
        end},
-      {:track_name, ~r/.*\s*(?<track_name>.*\.m3u8)/,
+      {:track_name, ~r/.*\s*(?<track_name>.*\..*$)/,
        fn raw ->
-         String.trim_trailing(raw, ".m3u8")
+         uri = URI.parse(raw)
+         name = String.trim_trailing(uri.path, ".m3u8")
+         query = uri.query
+         [{:track_name, name}, {:query, query}]
        end},
       {:resolution, ~r/RESOLUTION=(?<resolution>\d+x\d+)/,
        fn raw ->
@@ -135,7 +138,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     ]
 
     track_configs =
-      ~r/#EXT-X-STREAM-INF:.*\s*.*\.m3u8/
+      ~r/#EXT-X-STREAM-INF:.*\s*.*/
       |> Regex.scan(data)
       |> Enum.map(fn [line] -> capture_config(line, %{}, matchers) end)
       |> Enum.map(fn config ->
@@ -231,15 +234,26 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
           config
 
         captures ->
-          value =
+          new_config =
             captures
             |> Map.get(Atom.to_string(id))
             |> post_process.()
+            |> handle_capture_post_process(id, %{})
 
-          Map.put(config, id, value)
+          Map.merge(config, new_config)
       end
 
     capture_config(line, config, others)
+  end
+
+  defp handle_capture_post_process([{_key, _val} | _values] = values, _id, config) do
+    Enum.reduce(values, config, fn {key, val}, config ->
+      Map.put(config, key, val)
+    end)
+  end
+
+  defp handle_capture_post_process(value, id, config) do
+    Map.put(config, id, value)
   end
 
   defp build_media_playlist_path(%Manifest.Track{} = track) do
