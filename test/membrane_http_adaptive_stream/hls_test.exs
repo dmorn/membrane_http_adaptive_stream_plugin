@@ -165,9 +165,9 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
     end
 
     test "collects manifest header" do
-      version = 4
-      duration = 3
-      sequence = 1
+      version = 3
+      duration = 7
+      sequence = 662
       discontinuity = 1
       track = %Track.Config{id: "foo", track_name: "bar"}
 
@@ -177,6 +177,10 @@ defmodule Membrane.HTTPAdaptiveStream.HLSTest do
       #EXT-X-TARGETDURATION:#{duration}
       #EXT-X-MEDIA-SEQUENCE:#{sequence}
       #EXT-X-DISCONTINUITY-SEQUENCE:#{discontinuity}
+      #EXTINF:6.00000,
+      a/stream_1280x720/00000/stream_1280x720_00662.ts?t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTgwMjYwMjIsImlhdCI6MTY1Nzk2NzgyMiwiaXNzIjoiY2RwIiwic3ViIjoiZzM5azZLSjNLZ1UwL2Evc3RyZWFtXzEyODB4NzIwIiwidXNlcl9pZCI6IjEiLCJ2aXNpdG9yX2lkIjoiM2FhNjY1MGEtMDRmMy0xMWVkLWIzOGYtMGE1OGE5ZmVhYzAyIn0.DNMBbZPLE0yc0GnGjV5hG_eX_uQ5hzriLk0ZPe8w2AI
+      #EXTINF:6.00000,
+      a/stream_1280x720/00000/stream_1280x720_00663.ts?t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2NTgwMjYwMjIsImlhdCI6MTY1Nzk2NzgyMiwiaXNzIjoiY2RwIiwic3ViIjoiZzM5azZLSjNLZ1UwL2Evc3RyZWFtXzEyODB4NzIwIiwidXNlcl9pZCI6IjEiLCJ2aXNpdG9yX2lkIjoiM2FhNjY1MGEtMDRmMy0xMWVkLWIzOGYtMGE1OGE5ZmVhYzAyIn0.DNMBbZPLE0yc0GnGjV5hG_eX_uQ5hzriLk0ZPe8w2AI
       """
 
       track = HLS.deserialize_media_track(track, content)

@@ -168,9 +168,9 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end)
   end
 
-  def deserialize_master_manifest(name, _data) do
+  def deserialize_master_manifest(name, data) do
     raise ArgumentError,
-          "Could not deserialize manifest #{inspect(name)} as it contains invalid data"
+          "Could not deserialize manifest #{inspect(name)} as it contains invalid data: #{inspect data}"
   end
 
   @impl true
@@ -183,19 +183,9 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
 
     header_matchers = [
       {:version, ~r/#EXT-X-VERSION:(?<version>\d+)/, &String.to_integer(&1)},
-      {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/,
-       fn raw ->
-         String.to_integer(raw)
-       end},
-      {:current_seq_num, ~r/#EXT-X-MEDIA-SEQUENCE:(?<current_seq_num>\d+)/,
-       fn raw ->
-         String.to_integer(raw)
-       end},
-      {:current_discontinuity_seq_num,
-       ~r/#EXT-X-DISCONTINUITY-SEQUENCE:(?<current_discontinuity_seq_num>\d+)/,
-       fn raw ->
-         String.to_integer(raw)
-       end},
+      {:target_segment_duration, ~r/#EXT-X-TARGETDURATION:(?<target_segment_duration>\d+)/, &String.to_integer(&1)},
+      {:current_seq_num, ~r/#EXT-X-MEDIA-SEQUENCE:(?<current_seq_num>\d+)/, &String.to_integer(&1)},
+      {:current_discontinuity_seq_num, ~r/#EXT-X-DISCONTINUITY-SEQUENCE:(?<current_discontinuity_seq_num>\d+)/, &String.to_integer(&1)},
       {:segment_extension, ~r/#EXTINF:.*\s*(?<segment_extension>.*)/, &Path.extname(&1)}
     ]
 
@@ -228,8 +218,7 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
 
     track =
       Enum.reduce(segments, track, fn segment, track ->
-        {_, track} = Manifest.Track.add_segment(track, segment)
-        track
+        %Manifest.Track{track | segments: Qex.push(track.segments, segment)}
       end)
 
     if Regex.match?(~r/#EXT-X-ENDLIST/, data) do
@@ -239,8 +228,8 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end
   end
 
-  def deserialize_media_track(_other, _data),
-    do: raise(ArgumentError, "Invalid arguments provided")
+  def deserialize_media_track(_other, data),
+    do: raise(ArgumentError, "Could not deserialize media track as it contains invalid data: #{inspect data}")
 
   defp capture_config(_line, config, []), do: config
 
