@@ -91,6 +91,8 @@ defmodule Membrane.HTTPAdaptiveStream.HLS do
     end
   end
 
+  # TODO: deserialize audio tracks
+
   @impl true
   def deserialize_master_manifest("", _data),
     do: raise(ArgumentError, "No manifest name was provided")

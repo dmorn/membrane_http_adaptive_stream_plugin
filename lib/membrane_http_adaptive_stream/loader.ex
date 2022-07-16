@@ -19,7 +19,8 @@ defmodule Membrane.HTTPAdaptiveStream.Loader do
   """
   @callback init(config_t) :: state_t
 
-  @callback load_manifest(state_t, String.t()) :: callback_result_t
+  @callback manifest_name(state_t) :: String.t()
+  @callback load_manifest(state_t) :: callback_result_t
   @callback load_track(state_t, Track.Config.t()) :: callback_result_t
   @callback load_segment(state_t, Track.Segment.t()) :: callback_result_t
 
@@ -38,12 +39,12 @@ defmodule Membrane.HTTPAdaptiveStream.Loader do
     }
   end
 
-  @spec load_manifest(t, String.t()) :: {:ok, Manifest.t()} | {:error, any}
-  def load_manifest(loader, location) do
-    load_fun = fn -> loader.loader_impl.load_manifest(loader.impl_state, location) end
+  @spec load_manifest(t) :: {:ok, Manifest.t()} | {:error, any}
+  def load_manifest(loader) do
+    load_fun = fn -> loader.loader_impl.load_manifest(loader.impl_state) end
 
     decode_fun = fn data ->
-      manifest_name = Path.basename(location)
+      manifest_name = loader.loader_impl.manifest_name(loader.impl_state)
       loader.deserializer.deserialize_master_manifest(manifest_name, data)
     end
 
